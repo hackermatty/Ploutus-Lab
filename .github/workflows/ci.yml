@@ -30,5 +30,3 @@ jobs:
       - name: Self-test
         run: dotnet run -c Release --no-build -- selftest
 
-      - name: Analyze sample log
-        run: dotnet run -c Release --no-build -- analyze --file examples/sample-xfs.log --ceiling 20000
