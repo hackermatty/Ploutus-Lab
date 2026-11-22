@@ -1,0 +1,5 @@
+bin/
+obj/
+audit/*.log
+!audit/.gitkeep
+*.user
