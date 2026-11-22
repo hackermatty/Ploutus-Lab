@@ -263,7 +263,7 @@ public sealed class LabBus : IDisposable
             BitConverter.GetBytes(u.Count).CopyTo(buf, o + 0x0C);
             BitConverter.GetBytes(u.Rejected).CopyTo(buf, o + 0x10);
             BitConverter.GetBytes(u.Maximum).CopyTo(buf, o + 0x14);
-            BitConverter.GetBytes(u.Currency).CopyTo(buf, o + 0x1C);
+            XfsStructures.WriteAscii(u.Currency, 3).CopyTo(buf, o + 0x1C);
             BitConverter.GetBytes(u.Value).CopyTo(buf, o + 0x20);
             o += XfsStructures.SizeofCashUnitCore;
         }
@@ -302,15 +302,20 @@ public sealed class SafeCashUnit
     public uint Count { get; set; }
     public uint Rejected { get; set; }
     public uint Maximum { get; init; } = 2000;
-    public char Currency { get; init; } = 'E';
+    public string Currency { get; init; } = "AUD";   // ISO 4217, encoded as CHAR[3] at 0x1C
     public uint Value { get; init; }          // in minor units, e.g. 5000 = 50.00
     public int Presented { get; set; }
 
-    public static SafeCashUnit[] StandardEur() => new[]
+    /// <summary>
+    /// Four-cassette Australian set: $50, $20, $10 and $5 notes, all of which
+    /// are circulating AUD denominations. Values are minor units (cents), so
+    /// 5000 is a $50 note and the set holds 41,000.00 AUD.
+    /// </summary>
+    public static SafeCashUnit[] StandardAud() => new[]
     {
-        new SafeCashUnit { Number = 1, Value = 5000, Initial = 400, Count = 400 },
-        new SafeCashUnit { Number = 2, Value = 2000, Initial = 600, Count = 600 },
-        new SafeCashUnit { Number = 3, Value = 1000, Initial = 500, Count = 500 },
-        new SafeCashUnit { Number = 4, Value = 500,  Initial = 800, Count = 800 },
+        new SafeCashUnit { Number = 1, Value = 5000, Initial = 400, Count = 400, Currency = "AUD" },
+        new SafeCashUnit { Number = 2, Value = 2000, Initial = 600, Count = 600, Currency = "AUD" },
+        new SafeCashUnit { Number = 3, Value = 1000, Initial = 500, Count = 500, Currency = "AUD" },
+        new SafeCashUnit { Number = 4, Value = 500,  Initial = 800, Count = 800, Currency = "AUD" },
     };
 }

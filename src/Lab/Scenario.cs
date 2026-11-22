@@ -2,7 +2,7 @@ namespace PloutusLab.Xfs;
 
 /// <summary>
 /// End-to-end exercise:
-///   1. start the loopback lab bus with a standard EUR cassette set
+///   1. start the loopback lab bus with a standard AUD cassette set
 ///   2. collect two distinct operator approvals
 ///   3. open a CDM session through the framed transport
 ///   4. run one ceiling-clamped dispense and read the cassette back
@@ -24,7 +24,7 @@ public static class Scenario
         policy.Describe(output);
         output.WriteLine();
 
-        var units = SafeCashUnit.StandardEur();
+        var units = SafeCashUnit.StandardAud();
         var gate = new OperatorGate(auditPath, policy.RequiredApprovals, policy.AcknowledgementTtl);
         var bus = LabBus.Start(port, units.Select(u => new SafeCashUnit
         {
@@ -35,7 +35,7 @@ public static class Scenario
         {
             output.WriteLine($"lab bus on 127.0.0.1:{bus.Port}");
             output.WriteLine("cassette before:");
-            foreach (var u in bus.Units) output.WriteLine($"  {u.Number:D2} {u.Value / 100.0,8:F2} EUR x {u.Count,4}");
+            foreach (var u in bus.Units) output.WriteLine($"  {u.Number:D2} {u.Value / 100.0,8:F2} {u.Currency} x {u.Count,4}");
 
             gate.Grant("analyst-a", policy.AcknowledgementPurpose);
             gate.Grant("analyst-b", policy.AcknowledgementPurpose);
@@ -50,7 +50,7 @@ public static class Scenario
             output.WriteLine($"status    : {status.Describe()}");
 
             var (reply, stock) = cdm.CashUnitInfo();
-            output.WriteLine($"inventory : {reply.ResultName}, {stock.Count} cash units, {stock.Sum(s => (decimal)s.TotalMinorUnits) / 100m:F2} EUR total");
+            output.WriteLine($"inventory : {reply.ResultName}, {stock.Count} cash units, {stock.Sum(s => (decimal)s.TotalMinorUnits) / 100m:F2} {CurrencyOf(stock)} total");
 
             foreach (var probe in new[] { policy.MaxDispenseMinorUnits + 1, policy.MaxDispenseMinorUnits })
             {
@@ -67,7 +67,7 @@ public static class Scenario
             output.WriteLine();
             output.WriteLine("cassette after:");
             foreach (var u in after)
-                output.WriteLine($"  {u.Number:D2} {u.Value / 100.0,8:F2} EUR x {u.Count,4}");
+                output.WriteLine($"  {u.Number:D2} {u.Value / 100.0,8:F2} {u.Currency} x {u.Count,4}");
 
             ulong beforeTotal = stock.Aggregate(0UL, (acc, u) => acc + u.TotalMinorUnits);
             ulong afterTotal = after.Aggregate(0UL, (acc, u) => acc + u.TotalMinorUnits);
@@ -91,6 +91,13 @@ public static class Scenario
         }
     }
 
+    /// <summary>
+    /// The ISO code shared by the cassettes, so the report never claims a
+    /// currency the units do not carry. Falls back to AUD if the reply is empty.
+    /// </summary>
+    private static string CurrencyOf(IReadOnlyList<XfsStructures.CashUnit> units) =>
+        units.Count > 0 && units[0].Currency.Length > 0 ? units[0].Currency : "AUD";
+
     /// <summary>Runs the bus only, so an external client (Burp, a script, a test) can drive it.</summary>
     public static int Serve(TextWriter output, int port, string auditPath)
     {
@@ -104,7 +111,7 @@ public static class Scenario
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         foreach (var op in operators) gate.Grant(op, policy.AcknowledgementPurpose);
 
-        var bus = LabBus.Start(port, SafeCashUnit.StandardEur(), policy, gate);
+        var bus = LabBus.Start(port, SafeCashUnit.StandardAud(), policy, gate);
         output.WriteLine($"lab bus listening on 127.0.0.1:{bus.Port} (ctrl-c to stop)");
         policy.Describe(output);
         output.WriteLine($"operators pre-approved: {string.Join(",", operators)}");

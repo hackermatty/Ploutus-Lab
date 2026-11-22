@@ -35,7 +35,7 @@ public static class XfsStructures
     // ---- WFSCDMCASHUNIT ---------------------------------------------------
     // usNumber 0x00, usType 0x02, fwStatus 0x04, ulInitialCount 0x08,
     // ulCount 0x0C, ulRejectCount 0x10, ulMaximum 0x14, usStatus 0x18,
-    // bPause 0x1A, usCurrency 0x1C, ulValue 0x20, bAppLock 0x24,
+    // bPause 0x1A, usCurrency 0x1C (CHAR[3], ISO 4217), ulValue 0x20, bAppLock 0x24,
     // usAppLock 0x28, ...
     public const int SizeofCashUnitCore = 0x2C;
 
@@ -98,7 +98,7 @@ public static class XfsStructures
                 Count        = BitConverter.ToUInt32(slice[0x0C..]),
                 RejectCount  = BitConverter.ToUInt32(slice[0x10..]),
                 Maximum      = BitConverter.ToUInt32(slice[0x14..]),
-                Currency     = (char)BitConverter.ToUInt16(slice[0x1C..]),
+                Currency     = Encoding.ASCII.GetString(slice[0x1C..0x1F]).TrimEnd('\0', ' '),
                 Value        = BitConverter.ToUInt32(slice[0x20..]),
             });
             offset += SizeofCashUnitCore;
@@ -115,7 +115,7 @@ public static class XfsStructures
         public uint Count { get; init; }
         public uint RejectCount { get; init; }
         public uint Maximum { get; init; }
-        public char Currency { get; init; }
+        public string Currency { get; init; } = "";
         public uint Value { get; init; }
 
         public ulong TotalMinorUnits => (ulong)Count * Value;

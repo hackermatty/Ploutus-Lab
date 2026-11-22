@@ -57,7 +57,7 @@ public static class SelfTest
         // 3. Ceiling is enforced before any frame is written.
         var policy = new DispensePolicy { MaxDispenseMinorUnits = 1000 };
         var gate = new SilentGate(2);
-        using (var bus = LabBus.Start(0, SafeCashUnit.StandardEur(), policy, gate))
+        using (var bus = LabBus.Start(0, SafeCashUnit.StandardAud(), policy, gate))
         using (var transport = XfsTransport.Connect("127.0.0.1", bus.Port))
         using (var cdm = new CdmClient(transport, 1, gate, policy))
         {
@@ -85,7 +85,7 @@ public static class SelfTest
         // 6. No approvals -> no dispense.
         var noApprovalPolicy = new DispensePolicy { MaxDispenseMinorUnits = 1000 };
         var noApprovalGate = new SilentGate(0);
-        using (var bus = LabBus.Start(0, SafeCashUnit.StandardEur(), noApprovalPolicy, noApprovalGate))
+        using (var bus = LabBus.Start(0, SafeCashUnit.StandardAud(), noApprovalPolicy, noApprovalGate))
         using (var transport = XfsTransport.Connect("127.0.0.1", bus.Port))
         using (var cdm = new CdmClient(transport, 1, noApprovalGate, noApprovalPolicy))
         {
@@ -103,7 +103,7 @@ public static class SelfTest
             Window = new TimeWindow(DateTimeOffset.UtcNow.AddHours(-4), DateTimeOffset.UtcNow.AddHours(-3))
         };
         var closedGate = new SilentGate(2);
-        using (var bus = LabBus.Start(0, SafeCashUnit.StandardEur(), closedWindow, closedGate))
+        using (var bus = LabBus.Start(0, SafeCashUnit.StandardAud(), closedWindow, closedGate))
         using (var transport = XfsTransport.Connect("127.0.0.1", bus.Port))
         using (var cdm = new CdmClient(transport, 1, closedGate, closedWindow))
         {
@@ -115,7 +115,7 @@ public static class SelfTest
         //    still cannot exceed the ceiling or dispense without approvals.
         var rawGate = new SilentGate(0);
         var rawPolicy = new DispensePolicy { MaxDispenseMinorUnits = 1000 };
-        using (var bus = LabBus.Start(0, SafeCashUnit.StandardEur(), rawPolicy, rawGate))
+        using (var bus = LabBus.Start(0, SafeCashUnit.StandardAud(), rawPolicy, rawGate))
         using (var transport = XfsTransport.Connect("127.0.0.1", bus.Port))
         {
             var before = bus.Units.Aggregate(0UL, (acc, u) => acc + (ulong)u.Count * u.Value);
