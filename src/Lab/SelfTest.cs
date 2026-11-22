@@ -157,6 +157,25 @@ public static class SelfTest
         Check("clean trace has no high findings",
             !XfsLogAnalyzer.Analyze(clean, 20000).Any(f => f.Severity == "high"), "");
 
+        // 12. Currency selection reaches the wire: a EUR set round-trips as "EUR".
+        var eurPolicy = new DispensePolicy { Currency = "EUR" };
+        var eurGate = new SilentGate(2);
+        using (var bus = LabBus.Start(0, SafeCashUnit.StandardNotes(eurPolicy.Currency), eurPolicy, eurGate))
+        using (var transport = XfsTransport.Connect("127.0.0.1", bus.Port))
+        using (var cdm = new CdmClient(transport, hService: 1, eurGate, eurPolicy))
+        {
+            var (_, units) = cdm.CashUnitInfo();
+            Check("cassette carries requested currency",
+                units.Count == 4 && units.All(u => u.Currency == "EUR"),
+                string.Join(",", units.Select(u => u.Currency)));
+        }
+
+        // 13. An unknown currency is refused rather than silently defaulted.
+        var rejected = false;
+        try { SafeCashUnit.StandardNotes("XYZ"); }
+        catch (UnsupportedCurrencyException) { rejected = true; }
+        Check("unknown currency rejected", rejected, "");
+
         w.WriteLine();
         w.WriteLine($"result: {pass} passed, {fail} failed");
         return fail == 0 ? 0 : 1;

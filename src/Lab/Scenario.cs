@@ -2,7 +2,7 @@ namespace PloutusLab.Xfs;
 
 /// <summary>
 /// End-to-end exercise:
-///   1. start the loopback lab bus with a standard AUD cassette set
+///   1. start the loopback lab bus with the cassette set for the policy currency
 ///   2. collect two distinct operator approvals
 ///   3. open a CDM session through the framed transport
 ///   4. run one ceiling-clamped dispense and read the cassette back
@@ -24,7 +24,7 @@ public static class Scenario
         policy.Describe(output);
         output.WriteLine();
 
-        var units = SafeCashUnit.StandardAud();
+        var units = SafeCashUnit.StandardNotes(policy.Currency);
         var gate = new OperatorGate(auditPath, policy.RequiredApprovals, policy.AcknowledgementTtl);
         var bus = LabBus.Start(port, units.Select(u => new SafeCashUnit
         {
@@ -111,7 +111,7 @@ public static class Scenario
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         foreach (var op in operators) gate.Grant(op, policy.AcknowledgementPurpose);
 
-        var bus = LabBus.Start(port, SafeCashUnit.StandardAud(), policy, gate);
+        var bus = LabBus.Start(port, SafeCashUnit.StandardNotes(policy.Currency), policy, gate);
         output.WriteLine($"lab bus listening on 127.0.0.1:{bus.Port} (ctrl-c to stop)");
         policy.Describe(output);
         output.WriteLine($"operators pre-approved: {string.Join(",", operators)}");

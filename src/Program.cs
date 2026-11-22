@@ -38,6 +38,11 @@ internal static class Program
                     return cmd == "help" || cmd is "-h" or "--help" ? 0 : 64;
             }
         }
+        catch (UnsupportedCurrencyException ex)
+        {
+            Console.Error.WriteLine($"usage: {ex.Message}");
+            return 64;
+        }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"error: {ex.GetType().Name}: {ex.Message}");
@@ -126,6 +131,7 @@ internal static class Program
           PLOUTUS_WINDOW_START  exercise window start (ISO-8601, UTC)
           PLOUTUS_WINDOW_END    exercise window end   (ISO-8601, UTC)
           PLOUTUS_AUDIT         audit log path
+          PLOUTUS_CURRENCY      cassette set to load: AUD | EUR | GBP | USD (default AUD)
           PLOUTUS_OPERATORS     comma separated operator ids for serve mode
         """);
     }

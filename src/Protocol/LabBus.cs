@@ -293,6 +293,20 @@ public sealed class LabBus : IDisposable
     }
 }
 
+/// <summary>Raised when a cassette set is requested for a currency this build cannot encode.</summary>
+public sealed class UnsupportedCurrencyException : ArgumentException
+{
+    public UnsupportedCurrencyException(string currency, IReadOnlyList<string> supported)
+        : base($"unsupported currency '{currency}'; supported: {string.Join(", ", supported)}")
+    {
+        Currency = currency;
+        Supported = supported;
+    }
+
+    public string Currency { get; }
+    public IReadOnlyList<string> Supported { get; }
+}
+
 public sealed class SafeCashUnit
 {
     public ushort Number { get; init; }
@@ -306,16 +320,47 @@ public sealed class SafeCashUnit
     public uint Value { get; init; }          // in minor units, e.g. 5000 = 50.00
     public int Presented { get; set; }
 
+    /// <summary>The ISO 4217 codes this build can load a cassette set for.</summary>
+    public static readonly string[] SupportedCurrencies = { "AUD", "EUR", "GBP", "USD" };
+
+    public static bool IsSupported(string? currency) =>
+        currency is not null &&
+        Array.IndexOf(SupportedCurrencies, currency.Trim().ToUpperInvariant()) >= 0;
+
+    /// <summary>Normalises an ISO code, defaulting to AUD when unset.</summary>
+    public static string Normalize(string? currency) =>
+        string.IsNullOrWhiteSpace(currency) ? "AUD" : currency.Trim().ToUpperInvariant();
+
     /// <summary>
-    /// Four-cassette Australian set: $50, $20, $10 and $5 notes, all of which
-    /// are circulating AUD denominations. Values are minor units (cents), so
-    /// 5000 is a $50 note and the set holds 41,000.00 AUD.
+    /// Builds a cassette set for the named currency, largest note first.
+    /// Values are minor units (cents), so 5000 is a $50/€50/£50 note.
+    ///
+    /// AUD, EUR and GBP all use the same 50/20/10/5 note ladder and 41,000.00
+    /// total; USD uses 100/50/20 because $5 and $10 are not typically loaded.
     /// </summary>
-    public static SafeCashUnit[] StandardAud() => new[]
+    public static SafeCashUnit[] StandardNotes(string? currency = null)
     {
-        new SafeCashUnit { Number = 1, Value = 5000, Initial = 400, Count = 400, Currency = "AUD" },
-        new SafeCashUnit { Number = 2, Value = 2000, Initial = 600, Count = 600, Currency = "AUD" },
-        new SafeCashUnit { Number = 3, Value = 1000, Initial = 500, Count = 500, Currency = "AUD" },
-        new SafeCashUnit { Number = 4, Value = 500,  Initial = 800, Count = 800, Currency = "AUD" },
-    };
+        var code = Normalize(currency);
+
+        (uint Value, uint Count)[] layout = code switch
+        {
+            "AUD" => new (uint, uint)[] { (5000, 400), (2000, 600), (1000, 500), (500, 800) },
+            "EUR" => new (uint, uint)[] { (5000, 400), (2000, 600), (1000, 500), (500, 800) },
+            "GBP" => new (uint, uint)[] { (5000, 400), (2000, 600), (1000, 500), (500, 800) },
+            "USD" => new (uint, uint)[] { (10000, 300), (5000, 400), (2000, 900) },
+            _      => throw new UnsupportedCurrencyException(code, SupportedCurrencies),
+        };
+
+        return layout.Select((d, i) => new SafeCashUnit
+        {
+            Number = (ushort)(i + 1),
+            Value = d.Value,
+            Initial = d.Count,
+            Count = d.Count,
+            Currency = code,
+        }).ToArray();
+    }
+
+    /// <summary>Kept for callers that want the Australian set explicitly.</summary>
+    public static SafeCashUnit[] StandardAud() => StandardNotes("AUD");
 }

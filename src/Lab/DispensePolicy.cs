@@ -10,6 +10,9 @@ public sealed class DispensePolicy
 {
     public ulong MaxDispenseMinorUnits { get; init; } = 2_000;      // 20.00 in a cents currency
 
+    /// <summary>ISO 4217 code of the cassette set to load (PLOUTUS_CURRENCY).</summary>
+    public string Currency { get; init; } = "AUD";
+
     // Default is a rolling +-1h window so an interactive exercise works out of
     // the box; anything derived from the environment replaces it wholesale.
     public TimeWindow Window { get; init; } =
@@ -27,11 +30,16 @@ public sealed class DispensePolicy
         var start = ParseUtc("PLOUTUS_WINDOW_START") ?? DateTimeOffset.UtcNow.AddHours(-1);
         var end = ParseUtc("PLOUTUS_WINDOW_END") ?? DateTimeOffset.UtcNow.AddHours(1);
 
+        var currency = SafeCashUnit.Normalize(Environment.GetEnvironmentVariable("PLOUTUS_CURRENCY"));
+        if (!SafeCashUnit.IsSupported(currency))
+            throw new UnsupportedCurrencyException(currency, SafeCashUnit.SupportedCurrencies);
+
         return new DispensePolicy
         {
             MaxDispenseMinorUnits = max,
             Window = new TimeWindow(start, end),
-            AcknowledgementPurpose = Environment.GetEnvironmentVariable("PLOUTUS_ACK_PURPOSE") ?? "dispense"
+            AcknowledgementPurpose = Environment.GetEnvironmentVariable("PLOUTUS_ACK_PURPOSE") ?? "dispense",
+            Currency = currency
         };
     }
 
@@ -44,7 +52,8 @@ public sealed class DispensePolicy
 
     public void Describe(TextWriter w)
     {
-        w.WriteLine($"  ceiling      : {MaxDispenseMinorUnits} minor units");
+        w.WriteLine($"  ceiling      : {MaxDispenseMinorUnits} minor units ({MaxDispenseMinorUnits / 100m:F2} {Currency})");
+        w.WriteLine($"  currency     : {Currency} cassette set");
         w.WriteLine($"  window       : {Window.Start:u} .. {Window.End:u} (utc)");
         w.WriteLine($"  acknowledgement: {RequiredApprovals} approvals for '{AcknowledgementPurpose}', ttl {AcknowledgementTtl.TotalSeconds:0}s");
         w.WriteLine($"  currently    : {(Window.Contains(DateTimeOffset.UtcNow) ? "OPEN" : "CLOSED")}");

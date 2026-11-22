@@ -64,7 +64,7 @@ src/
     DispensePolicy.cs        ceiling, window, approval requirements
     OperatorGate.cs          HMAC approval tokens, append-only audit
     Scenario.cs              end-to-end exercise and serve mode
-    SelfTest.cs              28 assertions over guardrails, framing, forensics
+    SelfTest.cs              30 assertions over guardrails, framing, forensics
   Forensics/
     XfsLogAnalyzer.cs        Ploutus-behaviour scoring for vendor XFS logs
   Deploy/
@@ -92,6 +92,7 @@ Environment:
 | `PLOUTUS_MAX_MINOR` | hard ceiling in minor units (default 2000 = 20.00) |
 | `PLOUTUS_WINDOW_START` / `_END` | ISO-8601 UTC exercise window |
 | `PLOUTUS_AUDIT` | audit log path |
+| `PLOUTUS_CURRENCY` | cassette set to load: `AUD`, `EUR`, `GBP` or `USD` (default `AUD`) |
 | `PLOUTUS_OPERATORS` | comma-separated approvers for `serve` mode |
 
 `serve` binds `127.0.0.1` only. There is no flag to change that; the listener
@@ -195,7 +196,7 @@ off-terminal log shipping, and physical port/keypad controls.
 Observed and verified in this repository: the identifier arithmetic, the
 `WFSCDMDISPENSE` offsets, the GetInfo/Execute split, the policy enforcement
 ordering, the inventory round trip, the log rules, and the audit log - all
-covered by `selftest` (28/28 passing).
+covered by `selftest` (30/30 passing).
 
 Not modelled, and not claimed:
 
@@ -205,7 +206,8 @@ Not modelled, and not claimed:
 * the tail of `WFSCDMCASHUNIT` beyond the fields listed above is not parsed;
 * `WFSCDMDISPENSE` is built for the amount/selector path only - the
   denomination-list path (`lpDenomination`) is not exercised;
-* currency handling is minor-unit integer arithmetic with no rounding policy;
+* currency handling is minor-unit integer arithmetic with fixed note ladders for
+  the four supported codes and no rounding or FX policy;
 * the analyzer is heuristic - it reports evidence, not a verdict, and a clean
   trace does not prove a terminal is clean.
 
