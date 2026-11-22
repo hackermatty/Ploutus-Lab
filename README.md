@@ -213,9 +213,182 @@ Not modelled, and not claimed:
 
 ## 10. Using it on a real engagement
 
-Swap `XfsTransport` for an adapter over the actual channel you are authorised to
-test (a signed XFS client running on the terminal, or the vendor's documented
-remote interface), keep `CdmClient`'s ordering of checks, and replace the
-policy values with the engagement's agreed limits. Keep the audit file: the
-difference between an authorised test and an incident is whether the dispense
-calls are attributable.
+The modes are ordered by how much they touch. Work down the list and stop as
+soon as you have the answer: log analysis and the audit checklist need no
+access to a terminal, and only the last mode can move cash.
+
+### 10.1 Before anything runs
+
+The guardrails are only as good as the paperwork behind them.
+
+* **Scope in writing, naming the estate.** The amount, the window and the two
+  approver names in the authorisation should be the exact values you put in
+  `PLOUTUS_MAX_MINOR`, `PLOUTUS_WINDOW_START`/`_END` and `PLOUTUS_OPERATORS`.
+  If the letter says one thing and the environment another, the exercise is
+  testing something nobody approved.
+* **Two named people, both present.** The gate needs two distinct approvals and
+  the audit log records the ids, so the log becomes the record of who
+  authorised what.
+* **Cash-in-transit and the terminal owner notified.** A successful dispense is
+  a physical event. State which cassette and how much beforehand, or the
+  reconciliation afterwards becomes an incident.
+* **Baseline hashes captured.** SHA-256 of `msxfs.dll` and every vendor service
+  provider DLL, plus the XFS journal path and its rotation window. That
+  baseline is what ATM-04 is scored against later.
+* **A clock you trust.** The window check uses local `UtcNow`, so a drifting
+  laptop fails closed with `outside_service_window` rather than dispensing.
+
+### 10.2 Which mode answers which question
+
+| Mode | Reaches | Risk to the estate | Use it for |
+|---|---|---|---|
+| `analyze` | a log file | none (read only) | first pass on any trace you already hold |
+| `audit` | nothing | none (prints a checklist) | scoping an estate, writing findings |
+| `exercise` | loopback + in-memory safe | none (synthetic cassette) | training, validating your model of the flow |
+| `serve` + adapter | a real dispenser | cash moves | only under signed change control |
+
+Two properties make `exercise` safe to hand to a junior analyst: the cassette is
+in memory (`LabBus`), and the requested amount is clamped rather than trusted -
+`Scenario` dispenses `Math.Min(amount, ceiling)`, so `--amount 500000` cannot
+exceed the configured ceiling even if someone asks it to.
+
+### 10.3 Configuration for the engagement
+
+| Variable | Set it to |
+|---|---|
+| `PLOUTUS_MAX_MINOR` | the agreed per-dispense ceiling, in minor units |
+| `PLOUTUS_WINDOW_START` / `_END` | the change window, ISO-8601 UTC, wider than the run |
+| `PLOUTUS_ACK_PURPOSE` | a per-engagement string, e.g. `atm-04-validation` |
+| `PLOUTUS_AUDIT` | a path outside `bin/`, e.g. `~/engagements/<client>/audit.log` |
+| `PLOUTUS_OPERATORS` | the two named approvers, for `serve` only |
+
+`PLOUTUS_ACK_PURPOSE` is read by `DispensePolicy.FromEnvironment` but is not in
+the section 4 table. Set it distinctly per engagement: the HMAC covers
+`(operator, purpose, expiry)`, so a token minted for one job cannot satisfy
+another even if the log is replayed.
+
+Keep `PLOUTUS_AUDIT` outside the build output. The default lands under
+`AppContext.BaseDirectory`, where a `dotnet clean` would delete the audit trail.
+
+### 10.4 Exit codes before you script anything
+
+| Exit | Command | Meaning |
+|---|---|---|
+| 0 | `selftest` | every assertion passed |
+| 1 | `selftest` | at least one assertion failed |
+| 0 | `exercise` | the dispense returned `WFS_SUCCESS` |
+| 2 | `exercise` | the dispense was refused or failed (a valid result, not an error) |
+| 0 | `analyze` | no high-severity findings |
+| 1 | `analyze` | at least one high-severity finding |
+| 0 | `audit` | all ten controls marked met |
+| 1 | `audit` | at least one control not met, i.e. almost always |
+| 64 | any | usage error: bad flag, or `--file` missing |
+| 70 | any | unhandled exception |
+
+`analyze` and `audit` use a non-zero exit as a *finding*, not a failure. Put
+`analyze` in a pipeline as a gate if that suits you, but do not let `audit`
+break a build: it returns 1 until all ten controls are met.
+
+### 10.5 Working from logs, without touching a terminal
+
+Start here. It needs a trace the operator can export for you and nothing else.
+
+```bash
+ploutus-lab analyze --file <terminal>-2026-11-20.log --ceiling 50000
+```
+
+* **Calibrate `--ceiling` first.** `dispense-over-fastcash-limit` is only
+  meaningful against the terminal's real fast-cash limit; a guessed value
+  produces findings you cannot defend. Ask the operator for it.
+* **Baseline a known-good terminal.** Run the analyzer over a quiet day on a
+  terminal with no suspected activity, so "normal" is defined by data rather
+  than by assumption. Findings from the suspect terminal are then a delta.
+* **Read it as evidence, not a verdict.** The rules in section 7 are heuristic,
+  and session boundaries are inferred from `IDC_READ_*` / `IDC_EJECT_CARD`. A
+  log that carries a real session id should be keyed on that instead, as the
+  comment in `XfsLogAnalyzer` says.
+
+### 10.6 Scoring the estate against the baseline
+
+```bash
+ploutus-lab audit --met ATM-01,ATM-06,ATM-09 > audit-ATM-01.txt
+```
+
+Each unmet control is one finding, and the `test:` line is the verification step
+to put in it. The rendered output is the deliverable; keep it with the report so
+the client can re-run it after remediation and compare.
+
+### 10.7 Exercising against a real terminal
+
+Only with signed change control, and only after the two sections above have told
+you it is worth doing.
+
+**The transport needs a small refactor first.** Earlier revisions of this
+README said to "swap `XfsTransport` for an adapter", but `XfsTransport` is a
+`sealed` class and `CdmClient` takes it concretely, so there is nothing to
+substitute.
+
+Extract the interface over `Send`, then implement it over the channel you are
+authorised to use (a signed XFS client on the terminal, or the vendor's
+documented remote interface):
+
+```csharp
+public interface IXfsTransport : IDisposable
+{
+    XfsReply Send(ushort hService, XfsApi api, int command, string mnemonic, ReadOnlySpan<byte> body);
+}
+```
+
+That is three edits: add the interface, mark `XfsTransport : IXfsTransport`,
+and change `CdmClient`'s field and constructor parameter to `IXfsTransport`.
+This compiles with no warnings and the self test still passes 28/28, so the
+refactor costs nothing but has to happen before an adapter exists.
+
+**Keep the check ordering.** `CdmClient.Dispense` calls `CheckDispense` before it
+writes a frame: ceiling, then window, then acknowledgement. An adapter that
+moves that policy into the adapter, or behind it, has removed the only thing
+that makes this a harness.
+
+**Do not try to expose `serve`.** It binds `127.0.0.1` and refuses a
+non-loopback peer at accept time. If your test client runs on another host, use
+an SSH tunnel (`ssh -L 18500:127.0.0.1:18500 <jump>`): the tool then sees a
+loopback peer, which is the only configuration it will talk to.
+
+**Note what `serve` does and does not prove.** Approvals are pre-seeded from
+`PLOUTUS_OPERATORS`, so a successful dispense demonstrates that the policy path
+works, not that two humans approved it. The two-person property is only real in
+`exercise` mode, where `Grant` is called twice at run time.
+
+### 10.8 Evidence to capture
+
+* the audit log from `PLOUTUS_AUDIT`, hashed and stored off the device - the same
+  discipline ATM-09 asks of the client's own XFS journal;
+* `exercise --verbose` output, which includes the lab bus trace with the API,
+  command, byte count and result for every frame;
+* cash-unit inventory before and after, plus the reconciliation delta;
+* the operator ids and UTC timestamps the run used.
+
+Keep the **refused** lines. An entry like
+`DISPENSE_BLOCKED requested=2001 reason=amount_over_ceiling` is the proof that
+the control exists and fired, which is the actual finding.
+
+### 10.9 Hand-back
+
+Stop `serve`, confirm the cassette reconciles against what was dispensed, remove
+any adapter build from the terminal, restore the configuration you changed, and
+unset the `PLOUTUS_*` variables. The audit log names operators and timestamps,
+so treat it as client-confidential and hand it over rather than leaving it on
+the laptop.
+
+### 10.10 Turning controls into findings
+
+The three that matter most for this family, with the evidence that carries them:
+
+| Control | Finding | Evidence |
+|---|---|---|
+| ATM-02 | dispense callable outside the transaction state machine | the application's XFS wrapper exposes `WFSExecute(WFS_CMD_CDM_DISPENSE)` as a method reachable from anywhere in the process |
+| ATM-04 | XFS service provider chain not integrity-checked | SHA-256 of `msxfs.dll`/SP drift from the vendor manifest, with no alerting on the drift |
+| ATM-09 | dispense-without-card not detectable | the XFS journal never leaves the terminal, or the SIEM has no rule for `WFS_CMD_CDM_DISPENSE` without a preceding `WFS_CMD_PIN_ENTRY` |
+
+The difference between an authorised test and an incident is whether the
+dispense calls are attributable. That is what the audit file is for.
